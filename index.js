@@ -2,6 +2,7 @@ const express = require('express')
 const app = express()
 const cors = require('cors')
 require('dotenv').config()
+const mongoose = require('mongoose')
 
 app.use(cors())
 app.use(express.static('public'))
@@ -10,7 +11,8 @@ app.get('/', (req, res) => {
 });
 
 
-
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('Database Connected!'));
 
 
 const listener = app.listen(process.env.PORT || 3000, () => {
