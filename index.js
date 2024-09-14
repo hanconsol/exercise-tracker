@@ -4,8 +4,8 @@ const cors = require('cors')
 require('dotenv').config()
 const mongoose = require('mongoose')
 const User = require('./models/user.model.js')
-const getDate = require('./utils/getDate.js')
-// const {Exercise, Log} = require('./models/exercise.model.js')
+const { getDate, getDateDb } = require('./utils/getDate.js')
+const Exercise = require('./models/exercise.model.js')
 
 // middleware
 app.use(cors())
@@ -46,42 +46,72 @@ app.post('/api/users/:_id/exercises', async (req, res) => {
     const { _id: id } = req.params;
     let { description, duration, date: inDate } = req.body;
     console.log("req date", inDate);
-    // let parDate = Date.parse(inDate)
     let date = "";
 
     console.log("body - ", req.body);
 
-    date = await getDate((inDate));
+    date = await getDateDb((inDate));
 
     console.log("did date", date);
     let user = await User.findById(id);
     console.log("1st user  = ", user);
 
-    user.log.push({ description: description, duration: +duration, date: date });
-    const result = await user.save();
-    const index = user.log.length - 1
-
-    res.send({ username: user.username, description: user.log[index].description, duration: user.log[index].duration, date: user.log[index].date, _id: user._id });
-    console.log("saved result - ", result);
+    let exercise = await Exercise.create({
+      userId: id,
+      description: description,
+      duration: +duration,
+      date: date
+    });
+    const dateOut = await getDate(date);
+    res.send({ username: user.username, description: exercise.description, duration: exercise.duration, date: dateOut, _id: user._id });
+    console.log("saved result - ", exercise);
   }
   catch (error) {
     res.json({ error: error.message })
   }
 });
 // logs api
+
 app.get('/api/users/:_id/logs', async (req, res) => {
 
+  console.log("req query = ", req.query);
+  const { from, to, limit } = req.query;
+  console.log("from ", from, "to ", to, "limit ", limit);
+  const start = await getDateDb(from);
+  const end = await getDateDb(to);
+
+
+  const { _id: id } = req.params;
+  let search = {
+    userId: id
+  }
+  const filter = {};
+  if (from) {
+    filter.$gte = start;
+  };
+  if (to) {
+    filter.$lte = end;
+  };
+  if (from || to) {
+    search["date"] = filter;
+  };
   try {
-    const { _id: id } = req.params;
     const user = await User.findById(id);
     console.log("user object = ", user);
-    const cleanLog = user.log.map((ex) => {
+    console.log("search", search);
+    const log = await Exercise.find(search)
+      .limit(limit || 1000)
+      ;
+    console.log("log", log)
+
+    const cleanLog = log.map((ex) => {
       let { description, duration, date, _id } = ex;
+      date = new Date(date).toDateString();
       return { description, duration, date }
     });
     console.log(cleanLog);
 
-    const count = user.log.length;
+    const count = log.length;
     res.json({ username: user.username, _id: id, count: count, log: cleanLog });
   }
 
@@ -94,7 +124,7 @@ app.get('/api/users/:_id/logs', async (req, res) => {
 app.delete('/api/deleteAll', async (req, res) => {
   try {
     const result = await User.deleteMany({});
-    // const result2 = await Exercise.deleteMany({});
+    const result2 = await Exercise.deleteMany({});
     res.send("Collections Deleted");
   }
   catch (error) {
